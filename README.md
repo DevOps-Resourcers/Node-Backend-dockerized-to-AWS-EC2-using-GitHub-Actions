@@ -182,7 +182,6 @@ jobs:
 
 ## GitHub Action & AWS Configurations
 
-```yaml
 # -----------------------------------------------------------------------------
 # |                          Ride App Backend Deployment                      |
 # -----------------------------------------------------------------------------
@@ -249,7 +248,7 @@ jobs:
 # - EC2 instance should have an IAM role with permissions to access ECR
 # - EC2 instance should have Docker installed and running
 # - Ensure the security group of the EC2 instance allows inbound traffic on port 4000 
-```
+
 
 
 
