@@ -248,6 +248,7 @@ jobs:
 # - EC2 instance should have Docker installed and running
 # - Ensure the security group of the EC2 instance allows inbound traffic on port 4000 
 ```
+---
 
 ## GitHub Action & AWS Configurations
 
