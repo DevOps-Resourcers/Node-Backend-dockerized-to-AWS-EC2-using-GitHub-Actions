@@ -177,10 +177,8 @@ jobs:
             echo "------------------------"
 
           EOF
-
-
-
 ```
+---
 
 ## 🔐 Configurations and Secrets
 
