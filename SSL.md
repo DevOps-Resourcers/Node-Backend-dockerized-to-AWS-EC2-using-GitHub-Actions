@@ -32,6 +32,8 @@ docker run -d -p 9000:9000 --name ride-backend your-image-name
 
 ## 🛠️ 4. Install Nginx on EC2
 
+#### ⚙️ Add Inbound Rule in AWS Security Group for HTTP and HTTPS ⚙️
+
 ```bash
 sudo apt update
 sudo apt install nginx -y
