@@ -1,9 +1,11 @@
-name: Ride App Backend SonarQube Analysis & Deployment to Production EC2
+name: Ride App Backend SonarQube Analysis & Deployment to Development and Production EC2
 
 on:
   pull_request:
     types:
       - closed
+
+  workflow_dispatch:
 
 env:
   AWS_REGION: ${{ secrets.AWS_REGION }}
@@ -13,7 +15,7 @@ env:
 
 jobs:
   sonar-scanner:
-    if: github.event.pull_request.merged == true && contains(github.event.pull_request.title, 'codingcad-deploy-prod')
+    # if: github.event.pull_request.merged == true && contains(github.event.pull_request.title, 'codingcad-deploy-dev')
     name: 🧩 SonarQube Analysis
     runs-on: ubuntu-latest
     steps:
@@ -69,7 +71,7 @@ jobs:
           fi
 
   build-push:
-    if: github.event.pull_request.merged == true && contains(github.event.pull_request.title, 'codingcad-deploy-prod')
+    if: github.event.pull_request.merged == true && (contains(github.event.pull_request.title, 'codingcad-deploy-dev') || contains(github.event.pull_request.title, 'codingcad-deploy-prod'))
     name: 🌏 Build & Push
     runs-on: ubuntu-latest
     needs: sonar-scanner
@@ -98,11 +100,13 @@ jobs:
         run: |
           docker push $ECR_REGISTRY/$ECR_REPO:$IMAGE_TAG
 
-  deploy:
-    if: github.event.pull_request.merged == true && contains(github.event.pull_request.title, 'codingcad-deploy-prod')
-    name: 🌏 Deploy
+  deploy-dev:
+    if: github.event.pull_request.merged == true && contains(github.event.pull_request.title, 'codingcad-deploy-dev')
+    name: 👨🏻‍💻 Deploy Dev
     runs-on: ubuntu-latest
-    needs: build-push
+    needs:
+      - build-push
+      - sonar-scanner
 
     steps:
       - name: 📥 Checkout code
@@ -169,8 +173,78 @@ jobs:
 
           EOF
 
+  deploy-prod:
+    if: github.event.pull_request.merged == true && contains(github.event.pull_request.title, 'codingcad-deploy-prod')
+    name: 🌏 Deploy Prod
+    runs-on: ubuntu-latest
+    needs:
+      - build-push
+      - sonar-scanner
 
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v3
 
+      - name: 🔐 Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: 🗝️ Setup SSH Key for EC2 Access
+        run: |
+          echo "${{ secrets.EC2_SSH_KEY }}" > key.pem
+          chmod 600 key.pem
+
+      - name: 🚀 Deploy on EC2 Instance
+        run: |
+          ssh -o StrictHostKeyChecking=no -i key.pem ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} << EOF
+            
+            sudo usermod -aG docker $USER
+            
+            echo "-------------------------------------"
+            echo "Waiting for Docker cache cleaning..."
+            echo "-------------------------------------"
+
+            # Stop and remove all running containers
+            docker ps -aq | xargs -r docker stop
+            docker ps -aq | xargs -r docker rm
+
+            # Remove all images
+            docker images -aq | xargs -r docker rmi -f
+
+            # Remove build cache
+            docker builder prune -af
+
+            echo "--------------------"
+            echo "Docker cache removed"
+            echo "--------------------"
+
+            echo "--------------------"
+            echo "Docker Login to ECR"
+            echo "--------------------"
+
+            sudo docker login -u AWS -p \$(aws ecr get-login-password --region $AWS_REGION) $ECR_REGISTRY
+
+            echo "--------------------"
+            echo "Docker Pulling Image"
+            echo "--------------------"
+
+            sudo docker pull $ECR_REGISTRY/$ECR_REPO:$IMAGE_TAG
+
+            echo "-------------------------"
+            echo "Docker Starting Container"
+            echo "-------------------------"
+            sudo docker stop node-backend || true
+            sudo docker rm node-backend || true
+            sudo docker run -d --restart always --name node-backend -p 4000:4000 $ECR_REGISTRY/$ECR_REPO:$IMAGE_TAG
+
+            echo "------------------------"
+            echo "Docker Container Running"
+            echo "------------------------"
+
+          EOF
 
 # -----------------------------------------------------------------------------
 # |                          Configurations and Secrets                       |
